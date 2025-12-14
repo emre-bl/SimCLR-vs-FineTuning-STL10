@@ -1,6 +1,7 @@
 """
 Defines all data transformations and DataLoader functions.
 Overfitting fix: Added stronger augmentations for baseline training.
+Fixed: Added get_simclr_validation_loader for SimCLR evaluation.
 """
 
 import torch
@@ -84,6 +85,9 @@ def get_stl10_loaders(split, transform, batch_size, shuffle=True):
     return loader
 
 def get_simclr_loader(batch_size):
+    """
+    Loader for the 'unlabeled' training set with contrastive transforms.
+    """
     transform = ContrastiveTransformations(
         base_transforms=get_simclr_transforms(),
         n_views=2
@@ -98,6 +102,32 @@ def get_simclr_loader(batch_size):
         dataset,
         batch_size=batch_size,
         shuffle=True,
+        num_workers=0,
+        pin_memory=True,
+        drop_last=True
+    )
+    return loader
+
+def get_simclr_validation_loader(batch_size):
+    """
+    Loader for validation during SimCLR training.
+    Uses 'test' split but applies contrastive transforms to monitor Loss.
+    """
+    transform = ContrastiveTransformations(
+        base_transforms=get_simclr_transforms(),
+        n_views=2
+    )
+    # We use 'test' split to validate the unsupervised loss on unseen data
+    dataset = datasets.STL10(
+        root=config.DATA_DIR,
+        split='test', 
+        download=True,
+        transform=transform
+    )
+    loader = torch.utils.data.DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
         num_workers=0,
         pin_memory=True,
         drop_last=True

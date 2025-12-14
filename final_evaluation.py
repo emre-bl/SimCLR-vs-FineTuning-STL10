@@ -1,41 +1,73 @@
-# final_evaluation.py
 """
 Loads all three final models, evaluates them on the test set,
-saves a text report and generates a comparison plot.
+generates confusion matrices, and calculates Precision/Recall.
 """
 
 import torch
 import torch.nn as nn
 from torchvision import models as torchvision_models
 import matplotlib.pyplot as plt
+import numpy as np
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, confusion_matrix
+import seaborn as sns
 import os
 import config
 import data_setup
 import models
 import utils
 
-def save_plot(results, output_dir):
+# STL-10 Class Names
+CLASSES = ['airplane', 'bird', 'car', 'cat', 'deer', 'dog', 'horse', 'monkey', 'ship', 'truck']
+
+def plot_confusion_matrix(y_true, y_pred, title, filename):
     """
-    Generates and saves a bar chart comparing the models.
+    Generates and saves a confusion matrix heatmap.
+    """
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=CLASSES, yticklabels=CLASSES)
+    plt.title(title)
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
+    plt.tight_layout()
+    plt.savefig(filename)
+    plt.close()
+    print(f"Confusion Matrix saved to {filename}")
+
+def save_comparison_plot(results, output_dir):
+    """
+    Generates a grouped bar chart for Accuracy, F1, Precision, and Recall.
     """
     methods = list(results.keys())
-    accuracies = [res['acc'] * 100 for res in results.values()]
-    f1_scores = [res['f1'] * 100 for res in results.values()]
+    metrics = ['Accuracy', 'F1-Score', 'Precision', 'Recall']
+    
+    # Extract data
+    data = {m: [] for m in metrics}
+    for method in methods:
+        data['Accuracy'].append(results[method]['acc'] * 100)
+        data['F1-Score'].append(results[method]['f1'] * 100)
+        data['Precision'].append(results[method]['prec'] * 100)
+        data['Recall'].append(results[method]['rec'] * 100)
 
-    x = range(len(methods))
-    width = 0.35
+    x = np.arange(len(methods))
+    width = 0.2  # Width of the bars
 
-    fig, ax = plt.subplots(figsize=(10, 6))
-    rects1 = ax.bar([i - width/2 for i in x], accuracies, width, label='Accuracy (%)')
-    rects2 = ax.bar([i + width/2 for i in x], f1_scores, width, label='F1-Score (%)')
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    rects1 = ax.bar(x - 1.5*width, data['Accuracy'], width, label='Accuracy')
+    rects2 = ax.bar(x - 0.5*width, data['F1-Score'], width, label='F1-Score')
+    rects3 = ax.bar(x + 0.5*width, data['Precision'], width, label='Precision')
+    rects4 = ax.bar(x + 1.5*width, data['Recall'], width, label='Recall')
 
-    ax.set_ylabel('Scores')
-    ax.set_title('Model Performance Comparison (STL-10 Test Set)')
+    ax.set_ylabel('Score (%)')
+    ax.set_title('Comprehensive Model Comparison (STL-10)')
     ax.set_xticks(x)
     ax.set_xticklabels(methods)
     ax.legend()
     ax.set_ylim(0, 100)
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
 
+    # Add value labels
     def autolabel(rects):
         for rect in rects:
             height = rect.get_height()
@@ -43,114 +75,110 @@ def save_plot(results, output_dir):
                         xy=(rect.get_x() + rect.get_width() / 2, height),
                         xytext=(0, 3),
                         textcoords="offset points",
-                        ha='center', va='bottom')
+                        ha='center', va='bottom', fontsize=8, rotation=90)
 
     autolabel(rects1)
     autolabel(rects2)
+    autolabel(rects3)
+    autolabel(rects4)
 
     plt.tight_layout()
-    plot_path = os.path.join(output_dir, 'comparison_plot.png')
+    plot_path = os.path.join(output_dir, 'final_comparison_plot.png')
     plt.savefig(plot_path)
     print(f"Comparison plot saved to {plot_path}")
 
+def evaluate_model_full(model, loader, device, name, output_dir):
+    """
+    Runs full evaluation returning all metrics and generating CM.
+    """
+    print(f"Evaluating {name}...")
+    y_true, y_pred = utils.get_all_predictions(model, loader, device)
+    
+    acc = accuracy_score(y_true, y_pred)
+    f1 = f1_score(y_true, y_pred, average='macro')
+    prec = precision_score(y_true, y_pred, average='macro')
+    rec = recall_score(y_true, y_pred, average='macro')
+    
+    # Generate Confusion Matrix
+    cm_filename = os.path.join(output_dir, f'cm_{name.lower().replace(" ", "_")}.png')
+    plot_confusion_matrix(y_true, y_pred, f'Confusion Matrix - {name}', cm_filename)
+    
+    return {'acc': acc, 'f1': f1, 'prec': prec, 'rec': rec}
+
 def main():
-    output_dir = "results"
+    output_dir = config.RESULTS_DIR
     os.makedirs(output_dir, exist_ok=True)
     
-    print("--- Final Model Comparison on STL-10 Test Set ---")
+    print("--- Final Model Comparison with Advanced Metrics ---")
     device = config.DEVICE
-    criterion = nn.CrossEntropyLoss()
-    
-    # FIX: Initialize dictionary to store results by method name
     results = {}
 
-    # --- 1. Evaluate Baseline Model ---
-    print("\nEvaluating Baseline (from scratch) model...")
+    # --- 1. Baseline ---
     try:
         baseline_model = models.get_baseline_model().to(device)
-        baseline_model.load_state_dict(torch.load("baseline_model.pth"))
+        baseline_model.load_state_dict(torch.load(os.path.join(output_dir, "baseline_model.pth")))
         
-        test_transform_base = data_setup.get_baseline_transforms(train=False)
-        test_loader_base = data_setup.get_stl10_loaders('test', test_transform_base, config.BATCH_SIZE_BASELINE, shuffle=False)
+        test_loader = data_setup.get_stl10_loaders('test', data_setup.get_baseline_transforms(train=False), config.BATCH_SIZE_BASELINE, shuffle=False)
         
-        base_loss, base_acc, base_f1 = utils.evaluate(baseline_model, test_loader_base, criterion, device)
-        # FIX: Assign to specific key
-        results['Baseline'] = {'acc': base_acc, 'f1': base_f1}
+        results['Baseline'] = evaluate_model_full(baseline_model, test_loader, device, "Baseline", output_dir)
     except FileNotFoundError:
-        print("Warning: baseline_model.pth not found. Skipping.")
-        results['Baseline'] = {'acc': 0, 'f1': 0}
+        print("Warning: baseline_model.pth not found.")
+        results['Baseline'] = {'acc': 0, 'f1': 0, 'prec': 0, 'rec': 0}
 
-    # --- 2. Evaluate Fine-Tuned Model ---
-    print("Evaluating Fine-Tuned (ImageNet) model...")
+    # --- 2. Fine-Tuned ---
     try:
         finetune_model = models.get_finetune_model().to(device)
-        finetune_model.load_state_dict(torch.load("finetune_model.pth"))
+        finetune_model.load_state_dict(torch.load(os.path.join(output_dir, "finetune_model.pth")))
         
-        test_transform_ft = data_setup.get_finetune_transforms()
-        test_loader_ft = data_setup.get_stl10_loaders('test', test_transform_ft, config.BATCH_SIZE_FINETUNE, shuffle=False)
+        test_loader_ft = data_setup.get_stl10_loaders('test', data_setup.get_finetune_transforms(), config.BATCH_SIZE_FINETUNE, shuffle=False)
         
-        ft_loss, ft_acc, ft_f1 = utils.evaluate(finetune_model, test_loader_ft, criterion, device)
-        # FIX: Assign to specific key
-        results['Fine-Tuned'] = {'acc': ft_acc, 'f1': ft_f1}
+        results['Fine-Tuned'] = evaluate_model_full(finetune_model, test_loader_ft, device, "Fine-Tuned", output_dir)
     except FileNotFoundError:
-        print("Warning: finetune_model.pth not found. Skipping.")
-        results['Fine-Tuned'] = {'acc': 0, 'f1': 0}
+        print("Warning: finetune_model.pth not found.")
+        results['Fine-Tuned'] = {'acc': 0, 'f1': 0, 'prec': 0, 'rec': 0}
 
-    # --- 3. Evaluate Self-Supervised (SimCLR) Model ---
-    print("Evaluating Self-Supervised (SimCLR) model...")
+    # --- 3. Self-Supervised (SimCLR) ---
     try:
         backbone = torchvision_models.resnet50(weights=None)
-        num_ftrs = backbone.fc.in_features
         backbone.fc = nn.Identity()
+        ssl_model = nn.Sequential(backbone, nn.Linear(2048, config.NUM_CLASSES)).to(device)
         
-        ssl_model = nn.Sequential(
-            backbone,
-            nn.Linear(num_ftrs, config.NUM_CLASSES)
-        ).to(device)
+        ssl_model.load_state_dict(torch.load(os.path.join(output_dir, "linear_eval_model.pth")))
         
-        ssl_model.load_state_dict(torch.load("linear_eval_model.pth"))
-        
-        test_transform_base = data_setup.get_baseline_transforms(train=False) 
-        test_loader_ssl = data_setup.get_stl10_loaders('test', test_transform_base, config.BATCH_SIZE_BASELINE, shuffle=False)
+        # Reuse baseline test loader
+        test_loader_ssl = data_setup.get_stl10_loaders('test', data_setup.get_baseline_transforms(train=False), config.BATCH_SIZE_LINEAR, shuffle=False)
 
-        ssl_loss, ssl_acc, ssl_f1 = utils.evaluate(ssl_model, test_loader_ssl, criterion, device)
-        # FIX: Assign to specific key
-        results['Self-Supervised'] = {'acc': ssl_acc, 'f1': ssl_f1}
+        results['SimCLR'] = evaluate_model_full(ssl_model, test_loader_ssl, device, "SimCLR", output_dir)
     except FileNotFoundError:
-        print("Warning: linear_eval_model.pth not found. Skipping.")
-        results['Self-Supervised'] = {'acc': 0, 'f1': 0}
+        print("Warning: linear_eval_model.pth not found.")
+        results['SimCLR'] = {'acc': 0, 'f1': 0, 'prec': 0, 'rec': 0}
 
-    # --- 4. Save Report and Plot ---
-    report_path = os.path.join(output_dir, 'final_report.txt')
+    # --- 4. Save Text Report ---
+    report_path = os.path.join(output_dir, 'final_detailed_report.txt')
     with open(report_path, 'w') as f:
-        header = f"{'Method':<25} | {'Test Accuracy':<15} | {'Test F1-Score':<15}"
+        header = f"{'Method':<20} | {'Acc':<8} | {'F1':<8} | {'Prec':<8} | {'Rec':<8}"
         sep = "-" * len(header)
         
-        print("\n" + "="*60)
-        print("     Final Comparative Analysis Results")
-        print("="*60)
+        print("\n" + "="*65)
+        print("       FINAL COMPARATIVE RESULTS (Detailed)")
+        print("="*65)
         print(header)
         print(sep)
         
-        f.write("CMP722 - Final Comparative Analysis Results\n")
-        f.write("="*60 + "\n")
+        f.write("CMP722 - Final Detailed Results\n")
+        f.write("="*65 + "\n")
         f.write(header + "\n")
         f.write(sep + "\n")
 
-        for method, metrics in results.items():
-            line = f"{method:<25} | {metrics['acc']:<15.4f} | {metrics['f1']:<15.4f}"
+        for method, m in results.items():
+            line = f"{method:<20} | {m['acc']:.4f}   | {m['f1']:.4f}   | {m['prec']:.4f}   | {m['rec']:.4f}"
             print(line)
             f.write(line + "\n")
         
-        print("="*60)
-        f.write("="*60 + "\n")
-    
-    print(f"\nFinal report saved to {report_path}")
-    
-    try:
-        save_plot(results, output_dir)
-    except Exception as e:
-        print(f"Could not generate plot: {e}")
+        print("="*65)
+
+    # --- 5. Generate Comparison Plot ---
+    save_comparison_plot(results, output_dir)
 
 if __name__ == "__main__":
     main()
