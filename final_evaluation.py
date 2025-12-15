@@ -1,9 +1,3 @@
-"""
-Loads all three final models, evaluates them on the test set,
-generates confusion matrices, and calculates Precision/Recall.
-Fixed: Robust model loading (checks both results folder and root).
-"""
-
 import torch
 import torch.nn as nn
 from torchvision import models as torchvision_models

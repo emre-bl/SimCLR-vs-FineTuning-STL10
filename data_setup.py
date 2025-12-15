@@ -1,9 +1,3 @@
-"""
-Defines all data transformations and DataLoader functions.
-Overfitting fix: Added stronger augmentations for baseline training.
-Fixed: Added get_simclr_validation_loader for SimCLR evaluation.
-"""
-
 import torch
 from torchvision import transforms, datasets
 from torchvision.models import ResNet50_Weights
@@ -74,7 +68,6 @@ def get_stl10_loaders(split, transform, batch_size, shuffle=True):
         download=True,
         transform=transform
     )
-    # num_workers=0 ensures stability on Windows
     loader = torch.utils.data.DataLoader(
         dataset,
         batch_size=batch_size,

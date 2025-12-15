@@ -1,6 +1,5 @@
-# train_linear_eval.py
 """
-Runs Experiment 3 (Stage 2): Linear Evaluation with Early Stopping.
+Runs Linear Evaluation with Early Stopping.
 Includes robust weight loading to handle different key formats.
 """
 

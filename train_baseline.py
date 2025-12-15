@@ -1,5 +1,5 @@
 """
-Runs Experiment 1: Training from Scratch (Baseline).
+Runs Training from Scratch (Baseline).
 Overfitting fix: Added Weight Decay (L2 Regularization).
 """
 
@@ -19,7 +19,6 @@ def main():
     save_path = os.path.join(config.RESULTS_DIR, 'baseline_model.pth')
 
     # Data & Model
-    # Now uses the stronger augmentations defined in data_setup.py
     train_loader = data_setup.get_stl10_loaders('train', data_setup.get_baseline_transforms(train=True), config.BATCH_SIZE_BASELINE)
     test_loader = data_setup.get_stl10_loaders('test', data_setup.get_baseline_transforms(train=False), config.BATCH_SIZE_BASELINE, shuffle=False)
     
@@ -28,14 +27,13 @@ def main():
     # Training Setup
     criterion = nn.CrossEntropyLoss()
     
-    # ADDED: weight_decay=1e-4 (L2 Regularization)
+    # weight_decay=1e-4 (L2 Regularization)
     # This penalizes large weights, preventing the model from becoming too complex
     optimizer = optim.Adam(model.parameters(), lr=config.LR_BASELINE, weight_decay=1e-4)
     
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.EPOCHS_BASELINE)
     early_stopping = utils.EarlyStopping(patience=10, verbose=True, path=save_path)
 
-    # Loop
     print(f"Starting training for {config.EPOCHS_BASELINE} epochs with regularization...")
     for epoch in range(config.EPOCHS_BASELINE):
         train_loss, train_acc, _ = utils.train_one_epoch(model, train_loader, criterion, optimizer, config.DEVICE)

@@ -1,6 +1,5 @@
-# train_finetune.py
 """
-Runs Experiment 2: Fine-Tuning with Early Stopping.
+Runs  Fine-Tuning with Early Stopping.
 """
 
 import torch

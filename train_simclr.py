@@ -1,4 +1,3 @@
-# train_simclr.py
 """
 Runs Experiment 3 (Stage 1): Self-Supervised Pre-training (SimCLR) with Early Stopping.
 """

@@ -1,30 +1,25 @@
-"""
-Central configuration file for hyperparameters and paths.
-"""
 import torch
 import os
 
-# --- General Settings ---
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 NUM_CLASSES = 10
 DATA_DIR = "./data"
-RESULTS_DIR = "./results"  # BU SATIR EKSIKTI, EKLENDI
+RESULTS_DIR = "./results" 
 
-# Ensure results directory exists
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
-# --- Experiment 1: Baseline (From Scratch) ---
+# Baseline
 EPOCHS_BASELINE = 100 
 BATCH_SIZE_BASELINE = 64
 LR_BASELINE = 0.001
 
-# --- Experiment 2: Fine-Tuning (Supervised Pre-training) ---
+# Fine-Tuning 
 EPOCHS_FINETUNE = 25
 BATCH_SIZE_FINETUNE = 32
 LR_FINETUNE_BACKBONE = 1e-5
 LR_FINETUNE_HEAD = 1e-3
 
-# --- Experiment 3: Self-Supervised (SimCLR) ---
+# Self-Supervised (SimCLR)
 # Stage 1: Pre-training
 EPOCHS_SIMCLR = 100
 BATCH_SIZE_SIMCLR = 128
