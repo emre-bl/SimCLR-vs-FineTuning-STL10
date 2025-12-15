@@ -50,7 +50,7 @@ def main():
 
     # Early Stopping (Monitoring Contrastive Loss)
     # We save the WHOLE SimCLR model first, then extract backbone later
-    early_stopping = utils.EarlyStopping(patience=10, verbose=True, path='simclr_full_model.pth')
+    early_stopping = utils.EarlyStopping(patience=2, verbose=True, path='simclr_full_model.pth')
 
     # Training Loop
     print(f"Starting SimCLR training for {config.EPOCHS_SIMCLR} epochs...")

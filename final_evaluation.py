@@ -1,6 +1,7 @@
 """
 Loads all three final models, evaluates them on the test set,
 generates confusion matrices, and calculates Precision/Recall.
+Fixed: Robust model loading (checks both results folder and root).
 """
 
 import torch
@@ -18,6 +19,26 @@ import utils
 
 # STL-10 Class Names
 CLASSES = ['airplane', 'bird', 'car', 'cat', 'deer', 'dog', 'horse', 'monkey', 'ship', 'truck']
+
+def load_model_weights(model, filename, output_dir, device):
+    """
+    Attempts to load model weights from output_dir first, then current directory.
+    """
+    # 1. Check results directory
+    path_in_results = os.path.join(output_dir, filename)
+    if os.path.exists(path_in_results):
+        print(f"Loading {filename} from results directory...")
+        model.load_state_dict(torch.load(path_in_results, map_location=device))
+        return True
+    
+    # 2. Check root directory (Fallback)
+    if os.path.exists(filename):
+        print(f"Loading {filename} from root directory...")
+        model.load_state_dict(torch.load(filename, map_location=device))
+        return True
+        
+    print(f"Warning: {filename} not found in {output_dir} or root.")
+    return False
 
 def plot_confusion_matrix(y_true, y_pred, title, filename):
     """
@@ -63,7 +84,7 @@ def save_comparison_plot(results, output_dir):
     ax.set_title('Comprehensive Model Comparison (STL-10)')
     ax.set_xticks(x)
     ax.set_xticklabels(methods)
-    ax.legend()
+    ax.legend(loc='lower right')
     ax.set_ylim(0, 100)
     ax.grid(axis='y', linestyle='--', alpha=0.7)
 
@@ -96,8 +117,8 @@ def evaluate_model_full(model, loader, device, name, output_dir):
     
     acc = accuracy_score(y_true, y_pred)
     f1 = f1_score(y_true, y_pred, average='macro')
-    prec = precision_score(y_true, y_pred, average='macro')
-    rec = recall_score(y_true, y_pred, average='macro')
+    prec = precision_score(y_true, y_pred, average='macro', zero_division=0)
+    rec = recall_score(y_true, y_pred, average='macro', zero_division=0)
     
     # Generate Confusion Matrix
     cm_filename = os.path.join(output_dir, f'cm_{name.lower().replace(" ", "_")}.png')
@@ -106,7 +127,7 @@ def evaluate_model_full(model, loader, device, name, output_dir):
     return {'acc': acc, 'f1': f1, 'prec': prec, 'rec': rec}
 
 def main():
-    output_dir = config.RESULTS_DIR
+    output_dir = getattr(config, 'RESULTS_DIR', './results')
     os.makedirs(output_dir, exist_ok=True)
     
     print("--- Final Model Comparison with Advanced Metrics ---")
@@ -114,43 +135,31 @@ def main():
     results = {}
 
     # --- 1. Baseline ---
-    try:
-        baseline_model = models.get_baseline_model().to(device)
-        baseline_model.load_state_dict(torch.load(os.path.join(output_dir, "baseline_model.pth")))
-        
+    baseline_model = models.get_baseline_model().to(device)
+    if load_model_weights(baseline_model, "baseline_model.pth", output_dir, device):
         test_loader = data_setup.get_stl10_loaders('test', data_setup.get_baseline_transforms(train=False), config.BATCH_SIZE_BASELINE, shuffle=False)
-        
         results['Baseline'] = evaluate_model_full(baseline_model, test_loader, device, "Baseline", output_dir)
-    except FileNotFoundError:
-        print("Warning: baseline_model.pth not found.")
+    else:
         results['Baseline'] = {'acc': 0, 'f1': 0, 'prec': 0, 'rec': 0}
 
     # --- 2. Fine-Tuned ---
-    try:
-        finetune_model = models.get_finetune_model().to(device)
-        finetune_model.load_state_dict(torch.load(os.path.join(output_dir, "finetune_model.pth")))
-        
+    finetune_model = models.get_finetune_model().to(device)
+    if load_model_weights(finetune_model, "finetune_model.pth", output_dir, device):
         test_loader_ft = data_setup.get_stl10_loaders('test', data_setup.get_finetune_transforms(), config.BATCH_SIZE_FINETUNE, shuffle=False)
-        
         results['Fine-Tuned'] = evaluate_model_full(finetune_model, test_loader_ft, device, "Fine-Tuned", output_dir)
-    except FileNotFoundError:
-        print("Warning: finetune_model.pth not found.")
+    else:
         results['Fine-Tuned'] = {'acc': 0, 'f1': 0, 'prec': 0, 'rec': 0}
 
     # --- 3. Self-Supervised (SimCLR) ---
-    try:
-        backbone = torchvision_models.resnet50(weights=None)
-        backbone.fc = nn.Identity()
-        ssl_model = nn.Sequential(backbone, nn.Linear(2048, config.NUM_CLASSES)).to(device)
-        
-        ssl_model.load_state_dict(torch.load(os.path.join(output_dir, "linear_eval_model.pth")))
-        
+    backbone = torchvision_models.resnet50(weights=None)
+    backbone.fc = nn.Identity()
+    ssl_model = nn.Sequential(backbone, nn.Linear(2048, config.NUM_CLASSES)).to(device)
+    
+    if load_model_weights(ssl_model, "linear_eval_model.pth", output_dir, device):
         # Reuse baseline test loader
         test_loader_ssl = data_setup.get_stl10_loaders('test', data_setup.get_baseline_transforms(train=False), config.BATCH_SIZE_LINEAR, shuffle=False)
-
         results['SimCLR'] = evaluate_model_full(ssl_model, test_loader_ssl, device, "SimCLR", output_dir)
-    except FileNotFoundError:
-        print("Warning: linear_eval_model.pth not found.")
+    else:
         results['SimCLR'] = {'acc': 0, 'f1': 0, 'prec': 0, 'rec': 0}
 
     # --- 4. Save Text Report ---
@@ -178,7 +187,10 @@ def main():
         print("="*65)
 
     # --- 5. Generate Comparison Plot ---
-    save_comparison_plot(results, output_dir)
+    try:
+        save_comparison_plot(results, output_dir)
+    except Exception as e:
+        print(f"Error plotting: {e}")
 
 if __name__ == "__main__":
     main()
