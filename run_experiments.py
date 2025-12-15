@@ -37,10 +37,10 @@ def main():
     print(f"--- Starting Full Training Pipeline (Results: {results_dir}) ---")
     
     experiments = [
-        #("train_baseline.py", "log_1_baseline.txt"),
-        #("train_finetune.py", "log_2_finetune.txt"),
-        #("train_simclr.py", "log_3_simclr_pretrain.txt"),
-        #("train_linear_eval.py", "log_4_simclr_eval.txt"),
+        ("train_baseline.py", "log_1_baseline.txt"),
+        ("train_finetune.py", "log_2_finetune.txt"),
+        ("train_simclr.py", "log_3_simclr_pretrain.txt"),
+        ("train_linear_eval.py", "log_4_simclr_eval.txt"),
         ("final_evaluation.py", "log_5_final_report.txt")
     ]
 
